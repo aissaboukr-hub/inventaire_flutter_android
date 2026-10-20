@@ -1,0 +1,153 @@
+import 'package:bloc/bloc.dart';
+import 'package:equatable/equatable.dart';
+import '../../domain/entities/cart_item.dart';
+import 'package:billing_app/features/product/domain/entities/product.dart';
+import 'package:billing_app/features/product/domain/usecases/product_usecases.dart';
+import '../../../../core/utils/printer_helper.dart';
+import '../../../../core/data/hive_database.dart';
+import '../../../history/data/history_service.dart';
+
+part 'billing_event.dart';
+part 'billing_state.dart';
+
+class BillingBloc extends Bloc<BillingEvent, BillingState> {
+  final GetProductByBarcodeUseCase getProductByBarcodeUseCase;
+
+  BillingBloc({required this.getProductByBarcodeUseCase})
+      : super(const BillingState()) {
+    on<ScanBarcodeEvent>(_onScanBarcode);
+    on<AddProductToCartEvent>(_onAddProductToCart);
+    on<RemoveProductFromCartEvent>(_onRemoveProductFromCart);
+    on<UpdateQuantityEvent>(_onUpdateQuantity);
+    on<ClearCartEvent>(_onClearCart);
+    on<PrintReceiptEvent>(_onPrintReceipt);
+  }
+
+  Future<void> _onScanBarcode(
+      ScanBarcodeEvent event, Emitter<BillingState> emit) async {
+    final barcode = event.barcode.trim().toUpperCase();
+    final result = await getProductByBarcodeUseCase(barcode);
+    result.fold(
+      (failure) =>
+          emit(state.copyWith(error: 'Produit introuvable : $barcode')),
+      (product) {
+        add(AddProductToCartEvent(product));
+      },
+    );
+  }
+
+  void _onAddProductToCart(
+      AddProductToCartEvent event, Emitter<BillingState> emit) {
+    // Clear error when adding
+    final cleanState = state.copyWith(clearError: true);
+
+    final existingIndex = cleanState.cartItems
+        .indexWhere((item) => item.product.id == event.product.id);
+    if (existingIndex >= 0) {
+      final existingItem = cleanState.cartItems[existingIndex];
+      final backendItems = List<CartItem>.from(cleanState.cartItems);
+      backendItems[existingIndex] =
+          existingItem.copyWith(quantity: existingItem.quantity + 1);
+      emit(cleanState.copyWith(cartItems: backendItems, clearError: true));
+    } else {
+      final newItem = CartItem(product: event.product);
+      emit(cleanState.copyWith(
+          cartItems: [...cleanState.cartItems, newItem], clearError: true));
+    }
+  }
+
+  void _onRemoveProductFromCart(
+      RemoveProductFromCartEvent event, Emitter<BillingState> emit) {
+    final updatedList = state.cartItems
+        .where((item) => item.product.id != event.productId)
+        .toList();
+    emit(state.copyWith(cartItems: updatedList));
+  }
+
+  void _onUpdateQuantity(
+      UpdateQuantityEvent event, Emitter<BillingState> emit) {
+    if (event.quantity <= 0) {
+      add(RemoveProductFromCartEvent(event.productId));
+      return;
+    }
+
+    final index = state.cartItems
+        .indexWhere((item) => item.product.id == event.productId);
+    if (index >= 0) {
+      final items = List<CartItem>.from(state.cartItems);
+      items[index] = items[index].copyWith(quantity: event.quantity);
+      emit(state.copyWith(cartItems: items));
+    }
+  }
+
+  void _onClearCart(ClearCartEvent event, Emitter<BillingState> emit) {
+    emit(const BillingState());
+  }
+
+  Future<void> _onPrintReceipt(
+      PrintReceiptEvent event, Emitter<BillingState> emit) async {
+    final printerHelper = PrinterHelper();
+
+    emit(state.copyWith(
+      isPrinting: true,
+      printSuccess: false,
+      clearError: true,
+    ));
+
+    try {
+      final savedMac = HiveDatabase.settingsBox.get('printer_mac') as String?;
+      if (savedMac == null || savedMac.trim().isEmpty) {
+        throw Exception('Imprimante non connectée et aucune imprimante enregistrée !');
+      }
+
+      // Vérifie l'état réel et ne reconnecte que si nécessaire.
+      // La connexion mémorisée est réutilisée, sans scan Bluetooth.
+      final connected = await printerHelper.ensureConnected(savedMac);
+      if (!connected) {
+        throw Exception('Impossible de reconnecter automatiquement l’imprimante.');
+      }
+
+      final items = state.cartItems
+          .map((item) => {
+                'name': item.product.name,
+                'qty': item.quantity,
+                'price': item.product.price,
+                'total': item.total,
+              })
+          .toList();
+
+      await printerHelper.printReceipt(
+        shopName: event.shopName,
+        address1: event.address1,
+        address2: event.address2,
+        phone: event.phone,
+        items: items,
+        total: state.totalAmount,
+        footer: event.footer,
+      );
+
+      await HistoryService.addSale(
+        items: state.cartItems,
+        total: state.totalAmount,
+      );
+      // Une vente imprimée est terminée : vider le panier pour que la prochaine
+      // vente commence avec une liste vide. En cas d'échec d'impression, le
+      // panier est conservé afin de permettre une nouvelle tentative.
+      emit(const BillingState(printSuccess: true));
+    } catch (e) {
+      final errorMessage = e.toString().replaceFirst('Exception: ', '');
+      // Une impression échouée est également une opération historique.
+      await HistoryService.addPrintFailure(
+        items: state.cartItems,
+        total: state.totalAmount,
+        error: errorMessage,
+      );
+      emit(state.copyWith(
+        isPrinting: false,
+        error: 'Échec de l’impression : $errorMessage',
+        clearError: false,
+      ));
+    }
+  }
+
+}
