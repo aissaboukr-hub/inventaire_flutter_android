@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-const _green = Color(0xFF009B65);
-const _dark = Color(0xFF111111);
-const _panel = Color(0xFF202126);
+const _green = AppTheme.primaryColor;
+const _dark = AppTheme.backgroundColor;
+const _panel = AppTheme.surfaceColor;
 
 class InventoryHomePage extends StatelessWidget {
   const InventoryHomePage({super.key});
@@ -16,8 +17,8 @@ class InventoryHomePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: _dark,
       appBar: AppBar(
-        backgroundColor: _green,
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         centerTitle: true,
         title: const Text("Liste d'inventaire", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [PopupMenuButton<String>(onSelected: (v) {
@@ -30,20 +31,20 @@ class InventoryHomePage extends StatelessWidget {
         valueListenable: box.listenable(),
         builder: (context, Box<dynamic> sessions, _) {
           final items = sessions.values.whereType<Map>().toList().reversed.toList();
-          if (items.isEmpty) return const Center(child: Text('Aucun inventaire.\nAppuyez sur + pour en créer un.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 17)));
+          if (items.isEmpty) return const Center(child: Text('Aucun inventaire.\nAppuyez sur + pour en créer un.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 17)));
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
             itemCount: items.length,
-            separatorBuilder: (_, __) => const Divider(color: Colors.white24, height: 1),
+            separatorBuilder: (_, __) => const Divider(color: Colors.black12, height: 1),
             itemBuilder: (context, index) {
               final item = Map<String, dynamic>.from(items[index]);
               final products = (item['products'] as Map?)?.length ?? 0;
               final date = DateTime.tryParse('${item['createdAt'] ?? ''}');
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                title: Text('${item['name'] ?? 'Inventaire'}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                subtitle: Padding(padding: const EdgeInsets.only(top: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('⌄  Afficher les détails', style: TextStyle(color: Color(0xFF80DDB9), fontSize: 16)), const SizedBox(height: 6), Text('$products produit(s) compté(s)${date == null ? '' : ' • ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'}', style: const TextStyle(color: Colors.white60))])),
-                trailing: PopupMenuButton<String>(iconColor: Colors.white70, onSelected: (v) async { if (v == 'delete') await sessions.delete(item['id']); if (v == 'rename' && context.mounted) { final c = TextEditingController(text: '${item['name']}'); final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(title: const Text('Renommer l’inventaire'), content: TextField(controller: c, autofocus: true, decoration: const InputDecoration(labelText: 'Nom')), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Enregistrer'))])); if (name != null && name.isNotEmpty) { item['name'] = name; await sessions.put(item['id'], item); } } }, itemBuilder: (_) => const [PopupMenuItem(value: 'rename', child: Text('Renommer')), PopupMenuItem(value: 'delete', child: Text('Supprimer'))]),
+                title: Text('${item['name'] ?? 'Inventaire'}', style: const TextStyle(color: Colors.black87, fontSize: 20, fontWeight: FontWeight.bold)),
+                subtitle: Padding(padding: const EdgeInsets.only(top: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('⌄  Afficher les détails', style: TextStyle(color: AppTheme.primaryColor, fontSize: 16)), const SizedBox(height: 6), Text('$products produit(s) compté(s)${date == null ? '' : ' • ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'}', style: const TextStyle(color: Colors.black54))])),
+                trailing: PopupMenuButton<String>(iconColor: Colors.black54, onSelected: (v) async { if (v == 'delete') await sessions.delete(item['id']); if (v == 'rename' && context.mounted) { final c = TextEditingController(text: '${item['name']}'); final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(title: const Text('Renommer l’inventaire'), content: TextField(controller: c, autofocus: true, decoration: const InputDecoration(labelText: 'Nom')), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuler')), FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Enregistrer'))])); if (name != null && name.isNotEmpty) { item['name'] = name; await sessions.put(item['id'], item); } } }, itemBuilder: (_) => const [PopupMenuItem(value: 'rename', child: Text('Renommer')), PopupMenuItem(value: 'delete', child: Text('Supprimer'))]),
                 onTap: () => context.push('/inventory/detail', extra: item),
               );
             },
