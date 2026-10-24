@@ -42,6 +42,7 @@ class _MovementPageState extends State<MovementPage> {
   Future<void> _scan(List<Product> products) async {
     final result = await context.push<String>('/scanner');
     if (!mounted || result == null || result.trim().isEmpty) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     final code = result.trim();
     final product = products.where((p) => p.barcodes.any((b) => b.toUpperCase() == code.toUpperCase())).firstOrNull;
     setState(() {
@@ -85,7 +86,7 @@ class _MovementPageState extends State<MovementPage> {
     setState(() => _saving = true);
     final type = _operation == StockOperation.entry ? 'Entrée' : _operation == StockOperation.exit ? 'Sortie' : 'Inventaire';
     try {
-      await HistoryService.record(productId: product.id, productName: product.name, type: type, quantity: value.abs(), previousStock: product.stock, newStock: newStock, reason: _reasonController.text.trim());
+      await HistoryService.record(productId: product.id, productName: product.name, type: type, quantity: _operation == StockOperation.count ? value : value.abs(), previousStock: product.stock, newStock: newStock, reason: _reasonController.text.trim());
       if (!mounted) return;
       context.read<ProductBloc>().add(UpdateProduct(Product(id: product.id, name: product.name, barcode: product.barcode, barcode2: product.barcode2, price: product.price, stock: newStock)));
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mouvement enregistré.')));
