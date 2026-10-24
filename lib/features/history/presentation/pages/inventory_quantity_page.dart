@@ -39,6 +39,11 @@ class _InventoryQuantityPageState extends State<InventoryQuantityPage> {
       final oldDelta = int.tryParse('${counts[product.id] ?? 0}') ?? 0;
       counts[product.id] = oldDelta + delta;
       data['products'] = counts;
+      final enteredAt = Map<String, dynamic>.from(data['productEntryTimes'] as Map? ?? {});
+      enteredAt.putIfAbsent(product.id, () => DateTime.now().toIso8601String());
+      data['productEntryTimes'] = enteredAt;
+      widget.session['products'] = counts;
+      widget.session['productEntryTimes'] = enteredAt;
       await HistoryService.record(productId: product.id, productName: product.name, type: _isIn ? 'Entrée' : 'Sortie', quantity: amount, previousStock: product.stock, newStock: newStock, reason: _reason.text.trim().isEmpty ? 'Inventaire : ${data['name']}' : _reason.text.trim());
       if (!mounted) return;
       context.read<ProductBloc>().add(UpdateProduct(Product(id: product.id, name: product.name, barcode: product.barcode, barcode2: product.barcode2, price: product.price, stock: newStock)));

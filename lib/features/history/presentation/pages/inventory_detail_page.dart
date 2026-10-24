@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
 import 'package:excel_community/excel_community.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -9,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../product/domain/entities/product.dart';
+import '../../../auth/data/auth_service.dart';
 
 const _green = Color(0xFF009B65);
 const _dark = Color(0xFF111111);
@@ -39,14 +39,22 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     );
     final counts = Map<String, dynamic>.from(data['products'] as Map? ?? {});
     final old = int.tryParse('${counts[product.id] ?? 0}') ?? 0;
+    final now = DateTime.now().toIso8601String();
     counts[product.id] = old + delta;
     data['products'] = counts;
+    final enteredAt = Map<String, dynamic>.from(data['productEntryTimes'] as Map? ?? {});
+    // Conserver la date de première saisie du produit dans cet inventaire.
+    enteredAt.putIfAbsent(product.id, () => now);
+    data['productEntryTimes'] = enteredAt;
     await box.put(data['id'], data);
     if (!mounted) return;
-    setState(() => widget.session['products'] = counts);
+    setState(() {
+      widget.session['products'] = counts;
+      widget.session['productEntryTimes'] = enteredAt;
+    });
   }
 
-  List<int> _buildInventoryExcelBytes(List<Product> products, Map<String, dynamic> counts) {
+  List<int> _buildInventoryExcelBytes(List<Product> products, Map<String, dynamic> counts, Map<String, dynamic> enteredAt) {
     final excel = Excel.createExcel();
     final defaultSheet = excel.getDefaultSheet();
     final sheet = excel[defaultSheet ?? 'Inventaire'];
@@ -55,7 +63,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
       ['Inventaire', title],
       ['Date export', DateTime.now().toLocal().toString().split('.').first],
       [],
-      ['Nom du produit', 'Code-barres 1', 'Code-barres 2', 'Stock actuel', 'Écart saisi', 'Prix (DA)'],
+      ['Nom du produit', 'Code-barres 1', 'Code-barres 2', 'Stock actuel', 'Écart saisi', 'Prix (DA)', 'Date et heure de saisie'],
     ];
     for (final product in products) {
       rows.add([
@@ -65,6 +73,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
         '${product.stock}',
         '${int.tryParse('${counts[product.id] ?? 0}') ?? 0}',
         product.price == 0 ? '' : product.price.toString(),
+        _formatEntryDate(enteredAt[product.id]?.toString()),
       ]);
     }
     for (var r = 0; r < rows.length; r++) {
@@ -77,19 +86,31 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     return bytes;
   }
 
+  String _safeFilePart(String value) => value
+      .replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+
   String _exportFileName() {
-    final raw = '${widget.session['name'] ?? 'inventaire'}';
-    final safe = raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
-    return '${safe.isEmpty ? 'inventaire' : safe}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+    final inventoryName = _safeFilePart('${widget.session['name'] ?? 'inventaire'}');
+    final username = _safeFilePart(AuthService().currentUsername ?? 'utilisateur');
+    return '${inventoryName.isEmpty ? 'inventaire' : inventoryName}_${username.isEmpty ? 'utilisateur' : username}.xlsx';
   }
 
-  Future<void> _shareInventory(List<Product> products, Map<String, dynamic> counts) async {
+  String _formatEntryDate(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    final date = DateTime.tryParse(raw)?.toLocal();
+    if (date == null) return '';
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(date.day)}/${two(date.month)}/${date.year} ${two(date.hour)}:${two(date.minute)}:${two(date.second)}';
+  }
+
+  Future<void> _shareInventory(List<Product> products, Map<String, dynamic> counts, Map<String, dynamic> enteredAt) async {
     if (products.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun produit saisi à exporter.')));
       return;
     }
     try {
-      final bytes = Uint8List.fromList(_buildInventoryExcelBytes(products, counts));
+      final bytes = Uint8List.fromList(_buildInventoryExcelBytes(products, counts, enteredAt));
       final name = _exportFileName();
       await Share.shareXFiles(
         [XFile.fromData(bytes, name: name, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
@@ -98,25 +119,6 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
       );
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Échec du partage : $e')));
-    }
-  }
-
-  Future<void> _saveInventoryExcel(List<Product> products, Map<String, dynamic> counts) async {
-    if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun produit saisi à exporter.')));
-      return;
-    }
-    try {
-      final bytes = Uint8List.fromList(_buildInventoryExcelBytes(products, counts));
-      await FilePicker.saveFile(
-        dialogTitle: 'Enregistrer la liste de l’inventaire',
-        fileName: _exportFileName(),
-        type: FileType.custom,
-        allowedExtensions: ['xlsx'],
-        bytes: bytes,
-      );
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Échec de l’exportation : $e')));
     }
   }
 
@@ -179,15 +181,18 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
                 } else {
                   final state = context.read<ProductBloc>().state;
                   final counts = Map<String, dynamic>.from(widget.session['products'] as Map? ?? {});
+                  final enteredAt = Map<String, dynamic>.from(widget.session['productEntryTimes'] as Map? ?? {});
                   final products = state.products.where((p) => counts.containsKey(p.id)).toList()
-                    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-                  if (v == 'share') await _shareInventory(products, counts);
-                  if (v == 'save') await _saveInventoryExcel(products, counts);
+                    ..sort((a, b) {
+                      final da = DateTime.tryParse('${enteredAt[a.id] ?? ''}') ?? DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
+                      final db = DateTime.tryParse('${enteredAt[b.id] ?? ''}') ?? DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
+                      return da.compareTo(db);
+                    });
+                  if (v == 'share') await _shareInventory(products, counts, enteredAt);
                 }
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.share), title: Text('Partager Excel (WhatsApp / Bluetooth)'), contentPadding: EdgeInsets.zero)),
-                PopupMenuItem(value: 'save', child: ListTile(leading: Icon(Icons.file_download), title: Text('Enregistrer le fichier Excel'), contentPadding: EdgeInsets.zero)),
                 PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history), title: Text('Historique des mouvements'), contentPadding: EdgeInsets.zero)),
               ],
             ),
@@ -204,7 +209,13 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
             if (query.isEmpty) return counts.containsKey(product.id);
             return _matches(product, query);
           }).toList()
-            ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            ..sort((a, b) {
+              final enteredAt = Map<String, dynamic>.from(widget.session['productEntryTimes'] as Map? ?? {});
+              final created = DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final da = DateTime.tryParse('${enteredAt[a.id] ?? ''}') ?? created;
+              final db = DateTime.tryParse('${enteredAt[b.id] ?? ''}') ?? created;
+              return da.compareTo(db);
+            });
 
           return Column(children: [
             Padding(

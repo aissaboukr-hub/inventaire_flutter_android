@@ -22,7 +22,7 @@ GoRouter buildRouter() {
 
   bool adminOnly(String path) =>
       path == '/products' ||
-      path.startsWith('/products/') ||
+      (path.startsWith('/products/') && path != '/products/add') ||
       path == '/shop' ||
       path == '/import-export';
 
