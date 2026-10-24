@@ -19,6 +19,7 @@ class HiveDatabase {
     await Hive.openBox<ShopModel>(shopBoxName);
     await Hive.openBox(settingsBoxName); // Generic box for simple key-value
     await Hive.openBox('stock_movements'); // Historique permanent des mouvements
+    await Hive.openBox('inventory_sessions'); // Inventaires physiques enregistrés
   }
 
   static Box<ProductModel> get productBox =>

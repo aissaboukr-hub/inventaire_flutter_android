@@ -13,6 +13,9 @@ import '../../features/data_transfer/presentation/pages/import_export_page.dart'
 import '../../features/history/presentation/pages/history_page.dart';
 import '../../features/history/presentation/pages/movement_page.dart';
 import '../../features/product/domain/entities/product.dart';
+import '../../features/history/presentation/pages/inventory_home_page.dart';
+import '../../features/history/presentation/pages/inventory_detail_page.dart';
+import '../../features/history/presentation/pages/inventory_quantity_page.dart';
 
 GoRouter buildRouter() {
   final auth = AuthService();
@@ -48,8 +51,16 @@ GoRouter buildRouter() {
       GoRoute(path: '/login', builder: (context, state) => const AuthPage()),
       GoRoute(
         path: '/',
-        builder: (context, state) => const HomePage(),
+        builder: (context, state) => const InventoryHomePage(),
       ),
+      GoRoute(path: '/inventory/detail', builder: (context, state) {
+        final data = Map<String, dynamic>.from(state.extra as Map);
+        return InventoryDetailPage(session: data);
+      }),
+      GoRoute(path: '/inventory/quantity', builder: (context, state) {
+        final data = Map<String, dynamic>.from(state.extra as Map);
+        return InventoryQuantityPage(session: Map<String, dynamic>.from(data['session'] as Map), product: data['product'] as Product, type: data['type'] as String);
+      }),
       GoRoute(path: '/scanner', builder: (context, state) => const ScannerPage()),
       GoRoute(path: '/movements', builder: (context, state) {
         final type = state.uri.queryParameters['type'];
