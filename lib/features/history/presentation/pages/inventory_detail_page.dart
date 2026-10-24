@@ -1,3 +1,8 @@
+import 'dart:typed_data';
+
+import 'package:excel_community/excel_community.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +44,80 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     await box.put(data['id'], data);
     if (!mounted) return;
     setState(() => widget.session['products'] = counts);
+  }
+
+  List<int> _buildInventoryExcelBytes(List<Product> products, Map<String, dynamic> counts) {
+    final excel = Excel.createExcel();
+    final defaultSheet = excel.getDefaultSheet();
+    final sheet = excel[defaultSheet ?? 'Inventaire'];
+    final title = '${widget.session['name'] ?? 'Inventaire'}';
+    final rows = <List<String>>[
+      ['Inventaire', title],
+      ['Date export', DateTime.now().toLocal().toString().split('.').first],
+      [],
+      ['Nom du produit', 'Code-barres 1', 'Code-barres 2', 'Stock actuel', 'Écart saisi', 'Prix (DA)'],
+    ];
+    for (final product in products) {
+      rows.add([
+        product.name,
+        product.barcode,
+        product.barcode2,
+        '${product.stock}',
+        '${int.tryParse('${counts[product.id] ?? 0}') ?? 0}',
+        product.price == 0 ? '' : product.price.toString(),
+      ]);
+    }
+    for (var r = 0; r < rows.length; r++) {
+      for (var c = 0; c < rows[r].length; c++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r)).value = TextCellValue(rows[r][c]);
+      }
+    }
+    final bytes = excel.encode();
+    if (bytes == null) throw Exception('Impossible de créer le fichier Excel.');
+    return bytes;
+  }
+
+  String _exportFileName() {
+    final raw = '${widget.session['name'] ?? 'inventaire'}';
+    final safe = raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
+    return '${safe.isEmpty ? 'inventaire' : safe}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+  }
+
+  Future<void> _shareInventory(List<Product> products, Map<String, dynamic> counts) async {
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun produit saisi à exporter.')));
+      return;
+    }
+    try {
+      final bytes = Uint8List.fromList(_buildInventoryExcelBytes(products, counts));
+      final name = _exportFileName();
+      await Share.shareXFiles(
+        [XFile.fromData(bytes, name: name, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+        subject: 'Inventaire : ${widget.session['name'] ?? 'Inventaire'}',
+        text: 'Liste de l’inventaire ${widget.session['name'] ?? ''}',
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Échec du partage : $e')));
+    }
+  }
+
+  Future<void> _saveInventoryExcel(List<Product> products, Map<String, dynamic> counts) async {
+    if (products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun produit saisi à exporter.')));
+      return;
+    }
+    try {
+      final bytes = Uint8List.fromList(_buildInventoryExcelBytes(products, counts));
+      await FilePicker.saveFile(
+        dialogTitle: 'Enregistrer la liste de l’inventaire',
+        fileName: _exportFileName(),
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+        bytes: bytes,
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Échec de l’exportation : $e')));
+    }
   }
 
   bool _matches(Product product, String query) {
@@ -94,11 +173,22 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
           actions: [
             PopupMenuButton<String>(
               iconColor: Colors.white,
-              onSelected: (v) {
-                if (v == 'history') context.push('/history');
+              onSelected: (v) async {
+                if (v == 'history') {
+                  context.push('/history');
+                } else {
+                  final state = context.read<ProductBloc>().state;
+                  final counts = Map<String, dynamic>.from(widget.session['products'] as Map? ?? {});
+                  final products = state.products.where((p) => counts.containsKey(p.id)).toList()
+                    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                  if (v == 'share') await _shareInventory(products, counts);
+                  if (v == 'save') await _saveInventoryExcel(products, counts);
+                }
               },
               itemBuilder: (_) => const [
-                PopupMenuItem(value: 'history', child: Text('Historique des mouvements')),
+                PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.share), title: Text('Partager Excel (WhatsApp / Bluetooth)'), contentPadding: EdgeInsets.zero)),
+                PopupMenuItem(value: 'save', child: ListTile(leading: Icon(Icons.file_download), title: Text('Enregistrer le fichier Excel'), contentPadding: EdgeInsets.zero)),
+                PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history), title: Text('Historique des mouvements'), contentPadding: EdgeInsets.zero)),
               ],
             ),
           ],

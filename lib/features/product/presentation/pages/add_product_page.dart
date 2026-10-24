@@ -198,12 +198,12 @@ class _AddProductPageState extends State<AddProductPage> {
                   onSaved: (value) => _name = value!,
                 ),
                 const SizedBox(height: 24),
-                const InputLabel(text: 'Prix (DA)'),
+                const InputLabel(text: 'Prix (DA, facultatif)'),
                 TextFormField(
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
-                    hintText: '0.00',
+                    hintText: 'Laisser vide si le prix est inconnu',
                     prefixText: 'DA ',
                     prefixStyle: TextStyle(
                       fontSize: 16,
@@ -211,8 +211,18 @@ class _AddProductPageState extends State<AddProductPage> {
                       color: Colors.black,
                     ),
                   ),
-                  validator: AppValidators.price,
-                  onSaved: (value) => _price = double.parse(value!),
+                  validator: (value) {
+                    final text = value?.trim() ?? '';
+                    if (text.isEmpty) return null; // Le prix est facultatif.
+                    final parsed = double.tryParse(text.replaceAll(',', '.'));
+                    if (parsed == null) return 'Veuillez saisir un prix valide';
+                    if (parsed < 0) return 'Le prix ne peut pas être négatif';
+                    return null;
+                  },
+                  onSaved: (value) {
+                    final text = value?.trim().replaceAll(',', '.') ?? '';
+                    _price = text.isEmpty ? 0.0 : (double.tryParse(text) ?? 0.0);
+                  },
                 ),
               ],
             ),
