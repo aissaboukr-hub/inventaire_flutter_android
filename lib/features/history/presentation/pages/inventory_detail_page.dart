@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:excel_community/excel_community.dart';
@@ -112,8 +113,15 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     try {
       final bytes = Uint8List.fromList(_buildInventoryExcelBytes(products, counts, enteredAt));
       final name = _exportFileName();
+
+      // Share a real temporary file. XFile.fromData may be exposed by Android
+      // with an automatically generated UUID instead of the requested name.
+      final exportDirectory = await Directory.systemTemp.createTemp('inventaire_export_');
+      final exportFile = File('${exportDirectory.path}/$name');
+      await exportFile.writeAsBytes(bytes, flush: true);
+
       await Share.shareXFiles(
-        [XFile.fromData(bytes, name: name, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+        [XFile(exportFile.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
         subject: 'Inventaire : ${widget.session['name'] ?? 'Inventaire'}',
         text: 'Liste de l’inventaire ${widget.session['name'] ?? ''}',
       );
