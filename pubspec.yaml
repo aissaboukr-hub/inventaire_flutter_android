@@ -46,7 +46,7 @@ dependencies:
   device_info_plus: ^11.3.0
 
   # Import / export / authentication
-  excel_community: ^2.2.0
+  excel_community: ^2.6.0
   file_picker: ^11.0.2
   http: ^1.5.0
   share_plus: ^10.1.4

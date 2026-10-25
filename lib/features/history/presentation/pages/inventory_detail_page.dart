@@ -91,9 +91,9 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
       ]);
     }
 
-    final black = ExcelColor.fromHexString('000000');
-    final white = ExcelColor.fromHexString('FFFFFF');
-    final green = ExcelColor.fromHexString('218C58');
+    final black = ExcelColor.fromHexString('#FF000000');
+    final white = ExcelColor.fromHexString('#FFFFFFFF');
+    final green = ExcelColor.fromHexString('#FF218C58');
     final thinBorder = Border(
       borderStyle: BorderStyle.Thin,
       borderColorHex: black,
