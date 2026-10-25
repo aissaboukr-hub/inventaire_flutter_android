@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:excel_community/excel_community.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Border, BorderStyle;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
