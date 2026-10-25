@@ -3,7 +3,8 @@ import 'package:intl/intl.dart';
 import '../../data/history_service.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  final Map<String, dynamic>? session;
+  const HistoryPage({super.key, this.session});
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
@@ -14,11 +15,12 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final movements = HistoryService.all();
+    final session = widget.session;
+    final movements = HistoryService.all(inventoryId: session == null ? null : '${session['id'] ?? ''}');
     return Scaffold(
-      appBar: AppBar(title: const Text('Historique du stock')),
+      appBar: AppBar(title: Text(session == null ? 'Historique des mouvements' : 'Historique : ${session['name'] ?? 'Inventaire'}')),
       body: movements.isEmpty
-          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.history, size: 52), SizedBox(height: 12), Text('Aucun mouvement enregistré', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)), SizedBox(height: 6), Text('Les entrées, sorties et inventaires apparaîtront ici.', textAlign: TextAlign.center)])))
+          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.history, size: 52), SizedBox(height: 12), Text('Aucun mouvement enregistré', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)), SizedBox(height: 6), Text('Les entrées, sorties et saisies de cet inventaire apparaîtront ici.', textAlign: TextAlign.center)])))
           : ListView.separated(
               padding: const EdgeInsets.all(12), itemCount: movements.length, separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {

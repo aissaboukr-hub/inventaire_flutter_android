@@ -10,6 +10,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../product/domain/entities/product.dart';
 import '../../../auth/data/auth_service.dart';
+import '../../data/history_service.dart';
 
 const _green = Color(0xFF009B65);
 const _dark = Color(0xFF111111);
@@ -48,6 +49,12 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     enteredAt.putIfAbsent(product.id, () => now);
     data['productEntryTimes'] = enteredAt;
     await box.put(data['id'], data);
+    await HistoryService.record(
+      productId: product.id, productName: product.name, type: 'Saisie inventaire',
+      quantity: delta, previousStock: old, newStock: old + delta,
+      reason: 'Modification de la quantité saisie',
+      inventoryId: '${data['id']}', inventoryName: '${data['name'] ?? 'Inventaire'}',
+    );
     if (!mounted) return;
     setState(() {
       widget.session['products'] = counts;
@@ -163,6 +170,52 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     }
     sheet.setRowHeight(3, 34);
 
+    // Deuxième feuille : historique des mouvements propres à cet inventaire.
+    final movementSheet = excel['Historique des mouvements'];
+    final inventoryId = '${widget.session['id'] ?? ''}';
+    final movementBox = Hive.box('stock_movements');
+    final movements = movementBox.values.whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((m) => m['inventoryId'] == inventoryId)
+        .toList()
+      ..sort((a, b) => (a['date'] as String? ?? '').compareTo(b['date'] as String? ?? ''));
+    final movementRows = <List<String>>[
+      ['Inventaire', title],
+      ['Date export', DateTime.now().toLocal().toString().split('.').first],
+      [],
+      ['Date et heure', 'Type de mouvement', 'Produit', 'Quantité / écart', 'Valeur précédente', 'Nouvelle valeur', 'Motif'],
+      ...movements.map((m) => [
+        _formatEntryDate(m['date']?.toString()),
+        '${m['type'] ?? ''}',
+        '${m['productName'] ?? ''}',
+        '${m['quantity'] ?? 0}',
+        '${m['previousStock'] ?? 0}',
+        '${m['newStock'] ?? 0}',
+        '${m['reason'] ?? ''}',
+      ]),
+    ];
+    for (var r = 0; r < movementRows.length; r++) {
+      for (var c = 0; c < movementRows[r].length; c++) {
+        final idx = CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r);
+        final val = TextCellValue(movementRows[r][c]);
+        CellStyle? style;
+        if (r == 3) {
+          style = CellStyle(bold: true, fontColorHex: white, backgroundColorHex: green,
+            horizontalAlign: HorizontalAlign.Center, verticalAlign: VerticalAlign.Center,
+            textWrapping: TextWrapping.WrapText, topBorder: headerBorder, bottomBorder: headerBorder,
+            leftBorder: thinBorder, rightBorder: thinBorder);
+        } else if (r >= 4 || r < 2) {
+          style = CellStyle(bold: r < 2 && c == 0, fontColorHex: black,
+            verticalAlign: VerticalAlign.Center, textWrapping: TextWrapping.WrapText,
+            topBorder: thinBorder, bottomBorder: thinBorder, leftBorder: thinBorder, rightBorder: thinBorder);
+        }
+        movementSheet.updateCell(idx, val, cellStyle: style);
+      }
+    }
+    const movementWidths = <int, double>{0: 22, 1: 22, 2: 30, 3: 18, 4: 18, 5: 18, 6: 34};
+    for (final entry in movementWidths.entries) { movementSheet.setColumnWidth(entry.key, entry.value); }
+    movementSheet.setRowHeight(3, 34);
+
     final bytes = excel.encode();
     if (bytes == null) throw Exception('Impossible de créer le fichier Excel.');
     return bytes;
@@ -266,7 +319,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
               iconColor: Colors.white,
               onSelected: (v) async {
                 if (v == 'history') {
-                  context.push('/history');
+                  context.push('/history', extra: widget.session);
                 } else {
                   final state = context.read<ProductBloc>().state;
                   final counts = Map<String, dynamic>.from(widget.session['products'] as Map? ?? {});

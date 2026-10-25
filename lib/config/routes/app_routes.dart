@@ -75,7 +75,10 @@ GoRouter buildRouter() {
           builder: (context, state) => const ImportExportPage()),
       GoRoute(
           path: '/history',
-          builder: (context, state) => const HistoryPage()),
+          builder: (context, state) {
+            final extra = state.extra;
+            return HistoryPage(session: extra is Map ? Map<String, dynamic>.from(extra) : null);
+          }),
       GoRoute(
         path: '/users',
         builder: (context, state) => const UserManagementPage(),

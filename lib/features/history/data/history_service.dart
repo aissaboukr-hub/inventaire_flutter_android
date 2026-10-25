@@ -50,6 +50,8 @@ class HistoryService {
     required int previousStock,
     required int newStock,
     String reason = '',
+    String? inventoryId,
+    String? inventoryName,
   }) async {
     await init();
     await _box.add({
@@ -60,13 +62,15 @@ class HistoryService {
       'previousStock': previousStock,
       'newStock': newStock,
       'reason': reason,
+      if (inventoryId != null && inventoryId.isNotEmpty) 'inventoryId': inventoryId,
+      if (inventoryName != null && inventoryName.isNotEmpty) 'inventoryName': inventoryName,
       'date': DateTime.now().toIso8601String(),
     });
   }
 
-  static List<Map<String, dynamic>> all() {
+  static List<Map<String, dynamic>> all({String? inventoryId}) {
     if (!Hive.isBoxOpen(boxName)) return [];
-    final entries = _box.values.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    final entries = _box.values.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).where((entry) => inventoryId == null || entry['inventoryId'] == inventoryId).toList();
     entries.sort((a, b) => (b['date'] as String? ?? '').compareTo(a['date'] as String? ?? ''));
     return entries;
   }

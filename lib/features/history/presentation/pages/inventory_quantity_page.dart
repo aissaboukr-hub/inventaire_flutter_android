@@ -44,7 +44,7 @@ class _InventoryQuantityPageState extends State<InventoryQuantityPage> {
       data['productEntryTimes'] = enteredAt;
       widget.session['products'] = counts;
       widget.session['productEntryTimes'] = enteredAt;
-      await HistoryService.record(productId: product.id, productName: product.name, type: _isIn ? 'Entrée' : 'Sortie', quantity: amount, previousStock: product.stock, newStock: newStock, reason: _reason.text.trim().isEmpty ? 'Inventaire : ${data['name']}' : _reason.text.trim());
+      await HistoryService.record(productId: product.id, productName: product.name, type: _isIn ? 'Entrée' : 'Sortie', quantity: amount, previousStock: product.stock, newStock: newStock, reason: _reason.text.trim(), inventoryId: '${data['id'] ?? widget.session['id'] ?? ''}', inventoryName: '${data['name'] ?? widget.session['name'] ?? 'Inventaire'}');
       if (!mounted) return;
       context.read<ProductBloc>().add(UpdateProduct(Product(id: product.id, name: product.name, barcode: product.barcode, barcode2: product.barcode2, price: product.price, stock: newStock)));
       await box.put(data['id'], data);
