@@ -286,7 +286,14 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
   bool _matches(Product product, String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return false;
-    return product.name.toLowerCase().contains(q) ||
+
+    // Le caractère % sert de joker entre les mots : ENCRE%TAMPON
+    // correspond par exemple à « ENCRE A TAMPON » ou « ENCRE-TAMPON ».
+    final pattern = RegExp(
+      q.split('%').map(RegExp.escape).join('.*'),
+      caseSensitive: false,
+    );
+    return pattern.hasMatch(product.name) ||
         product.barcodes.any((barcode) => barcode.toLowerCase().contains(q));
   }
 

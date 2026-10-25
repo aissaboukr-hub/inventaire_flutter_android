@@ -149,10 +149,14 @@ class _ProductListPageState extends State<ProductListPage> {
                       child: Text('Aucun produit. Ajoutez-en un !'));
                 }
 
+                final searchPattern = RegExp(
+                  _searchQuery.trim().split('%').map(RegExp.escape).join('.*'),
+                  caseSensitive: false,
+                );
                 final filteredProducts = state.products
                     .where((product) =>
-                        product.name.toLowerCase().contains(_searchQuery) ||
-                        product.barcodes.any((code) => code.toLowerCase().contains(_searchQuery)))
+                        searchPattern.hasMatch(product.name) ||
+                        product.barcodes.any((code) => code.toLowerCase().contains(_searchQuery.trim())))
                     .toList();
 
                 if (filteredProducts.isEmpty) {
