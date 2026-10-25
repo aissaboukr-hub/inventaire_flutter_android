@@ -49,8 +49,12 @@ class _InventoryQuantityPageState extends State<InventoryQuantityPage> {
       context.read<ProductBloc>().add(UpdateProduct(Product(id: product.id, name: product.name, barcode: product.barcode, barcode2: product.barcode2, price: product.price, stock: newStock)));
       await box.put(data['id'], data);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_isIn ? 'Entrée enregistrée : +$amount' : 'Sortie enregistrée : -$amount')));
-      context.pop();
+      // Garder la session à jour et ouvrir directement le détail de cette liste
+      // après l'enregistrement, même si la page de quantité a été ouverte depuis
+      // un autre écran.
+      widget.session['products'] = counts;
+      widget.session['productEntryTimes'] = enteredAt;
+      context.go('/inventory/detail', extra: data);
     } finally { if (mounted) setState(() => _saving = false); }
   }
   @override Widget build(BuildContext context) => Scaffold(
