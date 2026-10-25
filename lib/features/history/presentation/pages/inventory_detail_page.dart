@@ -55,7 +55,11 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     });
   }
 
-  List<int> _buildInventoryExcelBytes(List<Product> products, Map<String, dynamic> counts, Map<String, dynamic> enteredAt) {
+  List<int> _buildInventoryExcelBytes(
+    List<Product> products,
+    Map<String, dynamic> counts,
+    Map<String, dynamic> enteredAt,
+  ) {
     final excel = Excel.createExcel();
     final defaultSheet = excel.getDefaultSheet();
     final sheet = excel[defaultSheet ?? 'Inventaire'];
@@ -64,8 +68,17 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
       ['Inventaire', title],
       ['Date export', DateTime.now().toLocal().toString().split('.').first],
       [],
-      ['Nom du produit', 'Code-barres 1', 'Code-barres 2', 'Stock actuel', 'Écart saisi', 'Prix (DA)', 'Date et heure de saisie'],
+      [
+        'Nom du produit',
+        'Code-barres 1',
+        'Code-barres 2',
+        'Stock actuel',
+        'Écart saisi',
+        'Prix (DA)',
+        'Date et heure de saisie',
+      ],
     ];
+
     for (final product in products) {
       rows.add([
         product.name,
@@ -77,52 +90,78 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
         _formatEntryDate(enteredAt[product.id]?.toString()),
       ]);
     }
+
+    final black = ExcelColor.fromHexString('000000');
+    final white = ExcelColor.fromHexString('FFFFFF');
+    final green = ExcelColor.fromHexString('218C58');
+    final thinBorder = Border(
+      borderStyle: BorderStyle.Thin,
+      borderColorHex: black,
+    );
+    final headerBorder = Border(
+      borderStyle: BorderStyle.Medium,
+      borderColorHex: black,
+    );
+
     for (var r = 0; r < rows.length; r++) {
       for (var c = 0; c < rows[r].length; c++) {
-        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
-        cell.value = TextCellValue(rows[r][c]);
+        final index = CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r);
+        final value = TextCellValue(rows[r][c]);
+        CellStyle? style;
 
-        // Give the exported worksheet a clear table layout with borders.
         if (r == 3) {
-          cell.cellStyle = CellStyle(
+          style = CellStyle(
             bold: true,
-            fontColorHex: ExcelColor.white,
-            backgroundColorHex: ExcelColor.fromHexString('#218C58'),
+            fontColorHex: white,
+            backgroundColorHex: green,
             horizontalAlign: HorizontalAlign.Center,
             verticalAlign: VerticalAlign.Center,
             textWrapping: TextWrapping.WrapText,
-            topBorder: Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.black),
-            bottomBorder: Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.black),
-            leftBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            rightBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            topBorder: headerBorder,
+            bottomBorder: headerBorder,
+            leftBorder: thinBorder,
+            rightBorder: thinBorder,
           );
         } else if (r >= 4) {
-          cell.cellStyle = CellStyle(
+          style = CellStyle(
+            fontColorHex: black,
             verticalAlign: VerticalAlign.Center,
             textWrapping: TextWrapping.WrapText,
-            topBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            bottomBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            leftBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            rightBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            topBorder: thinBorder,
+            bottomBorder: thinBorder,
+            leftBorder: thinBorder,
+            rightBorder: thinBorder,
           );
         } else if (r < 2) {
-          cell.cellStyle = CellStyle(
+          style = CellStyle(
             bold: c == 0,
-            topBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            bottomBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            leftBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
-            rightBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            fontColorHex: black,
+            topBorder: thinBorder,
+            bottomBorder: thinBorder,
+            leftBorder: thinBorder,
+            rightBorder: thinBorder,
           );
         }
+
+        // updateCell writes the value and its style together into the XLSX sheet.
+        sheet.updateCell(index, value, cellStyle: style);
       }
     }
 
-    // Set practical column widths for readability.
-    final columnWidths = <int, double>{0: 28, 1: 18, 2: 18, 3: 14, 4: 14, 5: 14, 6: 24};
+    // Keep the header row visible and make the exported sheet easy to read.
+    final columnWidths = <int, double>{
+      0: 30,
+      1: 20,
+      2: 20,
+      3: 15,
+      4: 15,
+      5: 15,
+      6: 28,
+    };
     for (final entry in columnWidths.entries) {
       sheet.setColumnWidth(entry.key, entry.value);
     }
-    sheet.setRowHeight(3, 32);
+    sheet.setRowHeight(3, 34);
 
     final bytes = excel.encode();
     if (bytes == null) throw Exception('Impossible de créer le fichier Excel.');
