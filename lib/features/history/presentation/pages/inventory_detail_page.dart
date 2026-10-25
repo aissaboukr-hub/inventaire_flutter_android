@@ -79,9 +79,51 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     }
     for (var r = 0; r < rows.length; r++) {
       for (var c = 0; c < rows[r].length; c++) {
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r)).value = TextCellValue(rows[r][c]);
+        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r));
+        cell.value = TextCellValue(rows[r][c]);
+
+        // Give the exported worksheet a clear table layout with borders.
+        if (r == 3) {
+          cell.cellStyle = CellStyle(
+            bold: true,
+            fontColorHex: ExcelColor.white,
+            backgroundColorHex: ExcelColor.fromHexString('#218C58'),
+            horizontalAlign: HorizontalAlign.Center,
+            verticalAlign: VerticalAlign.Center,
+            textWrapping: TextWrapping.WrapText,
+            topBorder: Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.black),
+            bottomBorder: Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.black),
+            leftBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            rightBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+          );
+        } else if (r >= 4) {
+          cell.cellStyle = CellStyle(
+            verticalAlign: VerticalAlign.Center,
+            textWrapping: TextWrapping.WrapText,
+            topBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            bottomBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            leftBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            rightBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+          );
+        } else if (r < 2) {
+          cell.cellStyle = CellStyle(
+            bold: c == 0,
+            topBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            bottomBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            leftBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+            rightBorder: Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.black),
+          );
+        }
       }
     }
+
+    // Set practical column widths for readability.
+    final columnWidths = <int, double>{0: 28, 1: 18, 2: 18, 3: 14, 4: 14, 5: 14, 6: 24};
+    for (final entry in columnWidths.entries) {
+      sheet.setColumnWidth(entry.key, entry.value);
+    }
+    sheet.setRowHeight(3, 32);
+
     final bytes = excel.encode();
     if (bytes == null) throw Exception('Impossible de créer le fichier Excel.');
     return bytes;
