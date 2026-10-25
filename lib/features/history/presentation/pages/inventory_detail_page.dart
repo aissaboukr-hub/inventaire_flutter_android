@@ -331,6 +331,13 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
         appBar: AppBar(
           backgroundColor: _green,
           foregroundColor: Colors.white,
+          // Toujours afficher un retour explicite vers l'accueil, même lorsque
+          // la page détail est ouverte avec context.go() après la sauvegarde.
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Retour à l’accueil',
+            onPressed: () => context.go('/'),
+          ),
           title: Text(widget.session['name'] ?? 'Inventaire',
               overflow: TextOverflow.ellipsis),
           actions: [
