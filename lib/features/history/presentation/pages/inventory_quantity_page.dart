@@ -40,7 +40,8 @@ class _InventoryQuantityPageState extends State<InventoryQuantityPage> {
       counts[product.id] = oldDelta + delta;
       data['products'] = counts;
       final enteredAt = Map<String, dynamic>.from(data['productEntryTimes'] as Map? ?? {});
-      enteredAt.putIfAbsent(product.id, () => DateTime.now().toIso8601String());
+      // La date reflète la dernière saisie de quantité pour trier du plus récent au plus ancien.
+      enteredAt[product.id] = DateTime.now().toIso8601String();
       data['productEntryTimes'] = enteredAt;
       widget.session['products'] = counts;
       widget.session['productEntryTimes'] = enteredAt;
@@ -54,6 +55,11 @@ class _InventoryQuantityPageState extends State<InventoryQuantityPage> {
       // un autre écran.
       widget.session['products'] = counts;
       widget.session['productEntryTimes'] = enteredAt;
+      // Demander à l'écran de détail de vider la recherche après l'enregistrement.
+      data['resetInventorySearch'] = DateTime.now().microsecondsSinceEpoch;
+      widget.session['resetInventorySearch'] = data['resetInventorySearch'];
+      await box.put(data['id'], data);
+      if (!mounted) return;
       context.go('/inventory/detail', extra: data);
     } finally { if (mounted) setState(() => _saving = false); }
   }

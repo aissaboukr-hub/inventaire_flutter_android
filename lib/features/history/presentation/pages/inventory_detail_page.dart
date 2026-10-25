@@ -27,6 +27,25 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   bool _scanNotFound = false;
+  int? _lastSearchResetToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastSearchResetToken = int.tryParse('${widget.session['resetInventorySearch'] ?? ''}');
+  }
+
+  @override
+  void didUpdateWidget(covariant InventoryDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final token = int.tryParse('${widget.session['resetInventorySearch'] ?? ''}');
+    if (token != null && token != _lastSearchResetToken) {
+      _lastSearchResetToken = token;
+      _searchController.clear();
+      _query = '';
+      _scanNotFound = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -46,7 +65,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
     data['products'] = counts;
     final enteredAt = Map<String, dynamic>.from(data['productEntryTimes'] as Map? ?? {});
     // Conserver la date de première saisie du produit dans cet inventaire.
-    enteredAt.putIfAbsent(product.id, () => now);
+    enteredAt[product.id] = now;
     data['productEntryTimes'] = enteredAt;
     await box.put(data['id'], data);
     await HistoryService.record(
@@ -178,7 +197,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
         .map((e) => Map<String, dynamic>.from(e))
         .where((m) => m['inventoryId'] == inventoryId)
         .toList()
-      ..sort((a, b) => (a['date'] as String? ?? '').compareTo(b['date'] as String? ?? ''));
+      ..sort((a, b) => (b['date'] as String? ?? '').compareTo(a['date'] as String? ?? ''));
     final movementRows = <List<String>>[
       ['Inventaire', title],
       ['Date export', DateTime.now().toLocal().toString().split('.').first],
@@ -328,7 +347,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
                     ..sort((a, b) {
                       final da = DateTime.tryParse('${enteredAt[a.id] ?? ''}') ?? DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
                       final db = DateTime.tryParse('${enteredAt[b.id] ?? ''}') ?? DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
-                      return da.compareTo(db);
+                      return db.compareTo(da);
                     });
                   if (v == 'share') await _shareInventory(products, counts, enteredAt);
                 }
@@ -356,7 +375,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
               final created = DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
               final da = DateTime.tryParse('${enteredAt[a.id] ?? ''}') ?? created;
               final db = DateTime.tryParse('${enteredAt[b.id] ?? ''}') ?? created;
-              return da.compareTo(db);
+              return db.compareTo(da);
             });
 
           return Column(children: [
