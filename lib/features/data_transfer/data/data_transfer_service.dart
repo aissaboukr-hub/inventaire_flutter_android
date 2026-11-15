@@ -132,20 +132,19 @@ class DataTransferService {
     }
   }
 
-  static String _normalizeBarcode(String value) => value.trim().toUpperCase();
+  // La valeur stockée reste exactement celle du fichier (espaces extérieurs retirés).
+  // La normalisation en majuscules sert uniquement à comparer les codes sans distinction de casse.
+  static String _cleanBarcode(String value) => value.trim();
+  static String _normalizeBarcode(String value) => _cleanBarcode(value).toUpperCase();
 
   static Product _productFromRow(List<String> row, {String? id, int stock = 0}) {
     if (row.length < 4) throw Exception('La ligne ne contient pas 4 colonnes.');
     if (row.length > 4) throw Exception('Aucune colonne supplémentaire n’est autorisée.');
-    var barcode1 = _normalizeBarcode(row[0]);
-    var barcode2 = _normalizeBarcode(row[1]);
-    if (barcode1.isEmpty && barcode2.isNotEmpty) {
-      barcode1 = barcode2;
-      barcode2 = '';
-    }
+    var barcode1 = _cleanBarcode(row[0]);
+    var barcode2 = _cleanBarcode(row[1]);
     final name = row[2].trim();
     final priceText = row[3].trim().replaceAll(',', '.');
-    if (barcode1.isEmpty) throw Exception('Au moins un code-barres est obligatoire (Code-barres 1 ou Code-barres 2).');
+    if (barcode1.isEmpty && barcode2.isEmpty) throw Exception('Au moins un code-barres est obligatoire (Code-barres 1 ou Code-barres 2).');
     if (name.isEmpty) throw Exception('Nom est obligatoire.');
     final price = double.tryParse(priceText);
     if (price == null) throw Exception('Prix doit être un nombre.');
@@ -269,6 +268,11 @@ class DataTransferService {
     return ImportResult(imported: imported, duplicates: duplicates, errors: errors, processed: processed, total: total);
   }
 
+  /// Synchronise le catalogue sur la source : chaque ligne valide du fichier
+  /// devient un produit. Les produits absents de la source sont retirés.
+  /// Les stocks et IDs existants sont conservés lorsqu'un code-barres correspond.
+  /// Les validations sont faites AVANT toute suppression pour éviter une perte
+  /// de données si le fichier contient une ligne invalide.
   static Future<ImportResult> _upsertProducts(List<List<String>> rows, {void Function(ImportProgress)? onProgress}) async {
     final box = HiveDatabase.productBox;
     final total = rows.length;
@@ -277,30 +281,35 @@ class DataTransferService {
     var duplicates = 0;
     var errors = 0;
 
-    final barcodeIndex = <String, Product>{};
+    final existingByBarcode = <String, Product>{};
     for (final product in box.values) {
       for (final barcode in product.barcodes) {
-        final code = _normalizeBarcode(barcode);
-        if (code.isNotEmpty) barcodeIndex.putIfAbsent(code, () => product);
+        final key = _normalizeBarcode(barcode);
+        if (key.isNotEmpty) existingByBarcode.putIfAbsent(key, () => product);
       }
     }
 
-    final pending = <String, ProductModel>{};
-    void report() => onProgress?.call(ImportProgress(processed: processed, total: total, imported: imported, duplicates: duplicates, errors: errors));
-    report();
-
-    for (final row in rows) {
-      if (row.every((v) => v.isEmpty)) {
-        processed++;
-        report();
-        continue;
-      }
+    // Préparer et contrôler toute la source avant de toucher à la base.
+    final prepared = <Product>[];
+    final sourceBarcodeOwners = <String, int>{};
+    final usedExistingIds = <String>{};
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.every((v) => v.trim().isEmpty)) continue;
       try {
         final incoming = _productFromRow(row);
-        final incomingCodes = incoming.barcodes.map(_normalizeBarcode).where((v) => v.isNotEmpty).toSet();
+        final codes = incoming.barcodes.map(_normalizeBarcode).where((v) => v.isNotEmpty).toSet();
+        for (final code in codes) {
+          final previousRow = sourceBarcodeOwners[code];
+          if (previousRow != null) {
+            throw Exception('Code-barres en double dans le fichier (lignes ${previousRow + 1} et ${i + 1}) : $code');
+          }
+          sourceBarcodeOwners[code] = i;
+        }
+
         Product? existing;
-        for (final code in incomingCodes) {
-          final found = barcodeIndex[code];
+        for (final code in codes) {
+          final found = existingByBarcode[code];
           if (found != null) {
             if (existing != null && existing.id != found.id) {
               throw Exception('Les codes-barres correspondent à deux produits différents.');
@@ -308,26 +317,40 @@ class DataTransferService {
             existing = found;
           }
         }
-        final product = existing == null
+        if (existing != null && !usedExistingIds.add(existing.id)) {
+          throw Exception('Plusieurs lignes du fichier correspondent au même produit existant.');
+        }
+        prepared.add(existing == null
             ? incoming
-            : Product(id: existing.id, name: incoming.name, barcode: incoming.barcode, barcode2: incoming.barcode2, price: incoming.price, stock: existing.stock);
-        pending[product.id] = ProductModel.fromEntity(product);
-        for (final code in incomingCodes) barcodeIndex[code] = product;
-        imported++;
-        if (existing != null) duplicates++;
-      } catch (_) {
+            : Product(id: existing.id, name: incoming.name, barcode: incoming.barcode,
+                barcode2: incoming.barcode2, price: incoming.price, stock: existing.stock));
+      } catch (e) {
         errors++;
-      }
-      processed++;
-      report();
-      if (pending.length >= 500) {
-        await box.putAll(pending);
-        pending.clear();
-        await Future<void>.delayed(Duration.zero);
+        throw Exception('Mise à jour annulée : ligne ${i + 2} invalide. ${e.toString().replaceFirst("Exception: ", "")} Aucune donnée existante n’a été supprimée.');
       }
     }
+
+    if (prepared.isEmpty) {
+      throw Exception('Mise à jour annulée : le fichier ne contient aucun produit. Le catalogue existant est conservé.');
+    }
+
+    final pending = <String, ProductModel>{};
+    for (final product in prepared) {
+      pending[product.id] = ProductModel.fromEntity(product);
+      if (existingByBarcode.values.any((p) => p.id == product.id)) {
+        duplicates++;
+      }
+      imported++;
+      processed++;
+      onProgress?.call(ImportProgress(processed: processed, total: total, imported: imported, duplicates: duplicates, errors: errors));
+    }
+
+    // Remplacement complet après validation réussie : la liste locale devient
+    // identique à la source Excel / Google Sheets.
+    await box.clear();
     if (pending.isNotEmpty) await box.putAll(pending);
-    report();
+    processed = total;
+    onProgress?.call(ImportProgress(processed: processed, total: total, imported: imported, duplicates: duplicates, errors: errors));
     return ImportResult(imported: imported, duplicates: duplicates, errors: errors, processed: processed, total: total);
   }
 

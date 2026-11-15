@@ -260,7 +260,7 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
 
   Future<void> _shareInventory(List<Product> products, Map<String, dynamic> counts, Map<String, dynamic> enteredAt) async {
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun produit saisi à exporter.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun produit dans le catalogue à exporter.')));
       return;
     }
     try {
@@ -357,7 +357,8 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
                   final state = context.read<ProductBloc>().state;
                   final counts = Map<String, dynamic>.from(widget.session['products'] as Map? ?? {});
                   final enteredAt = Map<String, dynamic>.from(widget.session['productEntryTimes'] as Map? ?? {});
-                  final products = state.products.where((p) => counts.containsKey(p.id)).toList()
+                  // L’export Excel reprend tout le catalogue, pas seulement les produits déjà saisis.
+                  final products = state.products.toList()
                     ..sort((a, b) {
                       final da = DateTime.tryParse('${enteredAt[a.id] ?? ''}') ?? DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);
                       final db = DateTime.tryParse('${enteredAt[b.id] ?? ''}') ?? DateTime.tryParse('${widget.session['createdAt'] ?? ''}') ?? DateTime.fromMillisecondsSinceEpoch(0);

@@ -102,13 +102,13 @@ class _ImportExportPageState extends State<ImportExportPage> {
           const SizedBox(height: 28),
           const Text('Mettre à jour la liste', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          const Text('Un produit est reconnu grâce à Code-barres 1 ou Code-barres 2. Son prix, son nom et ses codes sont mis à jour. Le stock actuel est conservé.'),
+          const Text('Synchronisation complète : la liste de l’application devient identique au fichier Excel ou Google Sheets. Les produits correspondants conservent leur stock. Les produits absents du fichier sont retirés. Les codes-barres alphanumériques (ex. TECHC00000810) sont conservés comme texte.'),
           const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.table_view),
               title: const Text('Mettre à jour depuis Excel'),
-              subtitle: const Text('Ajoute les nouveaux produits et actualise les produits existants.'),
+              subtitle: const Text('Remplace le catalogue par le contenu du fichier. Les stocks des produits reconnus sont conservés.'),
               onTap: _loading ? null : () => _run(DataTransferService.updateProductsFromExcel, verb: 'mis à jour'),
             ),
           ),
@@ -117,7 +117,7 @@ class _ImportExportPageState extends State<ImportExportPage> {
             child: ListTile(
               leading: const Icon(Icons.sync),
               title: const Text('Mettre à jour depuis Google Sheets'),
-              subtitle: const Text('Ajoute les nouveaux produits et actualise les produits existants.'),
+              subtitle: const Text('Remplace le catalogue par le contenu du fichier. Les stocks des produits reconnus sont conservés.'),
               onTap: _loading || _googleLinkEmpty ? null : () => _run(({void Function(ImportProgress)? onProgress}) => DataTransferService.updateProductsFromGoogleSheets(_url.text, onProgress: onProgress), verb: 'mis à jour'),
             ),
           ),
