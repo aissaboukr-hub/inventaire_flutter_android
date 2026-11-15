@@ -165,14 +165,14 @@ class DataTransferService {
 
   static Future<ImportResult> importProductsFromExcel({void Function(ImportProgress)? onProgress}) async {
     final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls'], withData: true);
-    if (result == null || result.files.single.bytes == null) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
-    return _insertProducts(await _readExcelRows(result.files.single.bytes!), onProgress: onProgress);
+    if (result.isEmpty || result.first.bytes == null) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
+    return _insertProducts(await _readExcelRows(result.first.bytes!), onProgress: onProgress);
   }
 
   static Future<ImportResult> updateProductsFromExcel({void Function(ImportProgress)? onProgress}) async {
     final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls'], withData: true);
-    if (result == null || result.files.single.bytes == null) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
-    return _upsertProducts(await _readExcelRows(result.files.single.bytes!), onProgress: onProgress);
+    if (result.isEmpty || result.first.bytes == null) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
+    return _upsertProducts(await _readExcelRows(result.first.bytes!), onProgress: onProgress);
   }
 
   static Future<List<List<String>>> _readGoogleRows(String link) async {
