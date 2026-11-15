@@ -12,26 +12,59 @@ class ScannerPage extends StatefulWidget {
   State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
-  final MobileScannerController controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    returnImage: false,
-  );
+class _ScannerPageState extends State<ScannerPage>
+    with WidgetsBindingObserver {
+  late final MobileScannerController controller;
   bool _isScanned = false;
-  bool _scanLocked = false;
-  Timer? _scanCooldownTimer;
-  static const Duration _scanCooldown = Duration(milliseconds: 1800);
+  bool _isStarting = false;
+  String? _cameraError;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Le démarrage est contrôlé ici, et non simultanément par le widget
+    // MobileScanner (autoStart:false), afin d'éviter les doubles démarrages.
+    controller = MobileScannerController(
+      autoStart: false,
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      returnImage: false,
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startScanner();
+    });
+  }
+
+  Future<void> _startScanner() async {
+    if (!mounted || _isScanned || _isStarting || controller.value.isRunning) {
+      return;
+    }
+
+    _isStarting = true;
+    if (mounted) {
+      setState(() => _cameraError = null);
+    }
+
+    try {
+      await controller.start();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _cameraError =
+              'Impossible d’ouvrir la caméra. Vérifiez son autorisation dans les paramètres de votre téléphone, puis réessayez.';
+        });
+      }
+    } finally {
+      _isStarting = false;
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      if (mounted && !_isScanned) controller.start();
+      _startScanner();
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
@@ -39,18 +72,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     }
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-
-    _scanCooldownTimer?.cancel();
-    controller.dispose();
-    super.dispose();
-  }
-
   Future<void> _onDetect(BarcodeCapture capture) async {
-    // Verrou immédiat contre les callbacks répétés du moteur de scan.
-    if (_isScanned || _scanLocked || !mounted) return;
+    if (_isScanned || !mounted) return;
 
     final rawValue = capture.barcodes
         .map((barcode) => barcode.rawValue)
@@ -60,77 +83,74 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
 
     if (rawValue.isEmpty) return;
 
-    _scanLocked = true;
+    // Verrouiller immédiatement pour éviter plusieurs retours du même scan.
     _isScanned = true;
 
     try {
-      // Stop avant de traiter le résultat : aucune seconde détection ne peut
-      // être traitée pendant cette transition.
       await controller.stop();
       await SystemSound.play(SystemSoundType.click);
-      if (mounted) {
-        context.pop(rawValue);
-      }
     } catch (_) {
-      _isScanned = false;
-      _scanLocked = false;
-    } finally {
-      _scanCooldownTimer?.cancel();
-      _scanCooldownTimer = Timer(_scanCooldown, () {
-        _scanLocked = false;
-      });
+      // Le résultat du code-barres reste valable même si l'arrêt de la
+      // caméra ou le son échoue.
     }
+
+    if (mounted) {
+      context.pop(rawValue);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          leading: IconButton(
-            icon: Icon(Icons.chevron_left,
-                size: 28, color: Theme.of(context).primaryColor),
-            onPressed: () => context.pop(),
+        leading: IconButton(
+          icon: Icon(
+            Icons.chevron_left,
+            size: 28,
+            color: Theme.of(context).primaryColor,
           ),
-          title: const Text('Scanner un code-barres',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text(
+          'Scanner un code-barres',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+      ),
       body: Stack(
         children: [
-          MobileScanner(
-            controller: controller,
-            onDetect: _onDetect,
-            // Removed overlay property
-          ),
-          // Simple border overlay manually
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.transparent, width: 0),
+          Positioned.fill(
+            child: MobileScanner(
+              controller: controller,
+              onDetect: _onDetect,
             ),
+          ),
+          IgnorePointer(
             child: Center(
               child: Container(
                 width: 250,
                 height: 250,
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.green, width: 2),
-                  // borderRadius: BorderRadius.circular(16),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(5.0),
+                  padding: const EdgeInsets.all(5),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _corner(0),
-                          _corner(1),
-                        ],
+                        children: [_corner(), _corner()],
                       ),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _corner(3),
-                          _corner(2),
-                        ],
+                        children: [_corner(), _corner()],
                       ),
                     ],
                   ),
@@ -148,12 +168,46 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               style: TextStyle(color: Colors.white, fontSize: 16),
             ),
           ),
+          if (_cameraError != null)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.78),
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.no_photography,
+                        color: Colors.white,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _cameraError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        onPressed: _startScanner,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Réessayer'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _corner(int index) {
+  Widget _corner() {
     return Container(
       width: 15,
       height: 15,
