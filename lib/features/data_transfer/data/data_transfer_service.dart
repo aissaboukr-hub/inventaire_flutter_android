@@ -164,15 +164,17 @@ class DataTransferService {
   }
 
   static Future<ImportResult> importProductsFromExcel({void Function(ImportProgress)? onProgress}) async {
-    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls'], withData: true);
-    if (result.isEmpty || result.first.bytes == null) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
-    return _insertProducts(await _readExcelRows(result.first.bytes!), onProgress: onProgress);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls']);
+    if (result.isEmpty) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
+    final bytes = await result.first.readAsBytes();
+    return _insertProducts(await _readExcelRows(bytes), onProgress: onProgress);
   }
 
   static Future<ImportResult> updateProductsFromExcel({void Function(ImportProgress)? onProgress}) async {
-    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls'], withData: true);
-    if (result.isEmpty || result.first.bytes == null) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
-    return _upsertProducts(await _readExcelRows(result.first.bytes!), onProgress: onProgress);
+    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx', 'xls']);
+    if (result.isEmpty) return const ImportResult(imported: 0, duplicates: 0, errors: 0, processed: 0, total: 0);
+    final bytes = await result.first.readAsBytes();
+    return _upsertProducts(await _readExcelRows(bytes), onProgress: onProgress);
   }
 
   static Future<List<List<String>>> _readGoogleRows(String link) async {
@@ -400,7 +402,7 @@ class DataTransferService {
   static Future<void> shareHistoryExcel({required List<Map<String, dynamic>> history}) async {
     final bytes = _historyExcelBytes(history: history);
     final fileName = 'historique_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-    await Share.shareXFiles([XFile.fromData(bytes, name: fileName, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')], subject: 'Historique des opérations', text: 'Historique des opérations');
+    await SharePlus.instance.share(ShareParams(files: [XFile.fromData(bytes, name: fileName, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')], subject: 'Historique des opérations', text: 'Historique des opérations'));
   }
 
   static Future<void> exportHistoryToGoogleSheets({required List<Map<String, dynamic>> history, required String endpoint}) async {

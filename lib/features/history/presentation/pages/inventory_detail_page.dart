@@ -273,11 +273,11 @@ class _InventoryDetailPageState extends State<InventoryDetailPage> {
       final exportFile = File('${exportDirectory.path}/$name');
       await exportFile.writeAsBytes(bytes, flush: true);
 
-      await Share.shareXFiles(
-        [XFile(exportFile.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(exportFile.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
         subject: 'Inventaire : ${widget.session['name'] ?? 'Inventaire'}',
         text: 'Liste de l’inventaire ${widget.session['name'] ?? ''}',
-      );
+      ));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Échec du partage : $e')));
     }
